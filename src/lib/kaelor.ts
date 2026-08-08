@@ -235,33 +235,29 @@ export function drawBracelet(
 
   const beads = orderBeads(beadsInput, pattern);
   const lanes = lanesFor(beads, pattern);
-  const maxRadius = size * 0.42;
-
-  // radio de cada carril: el hilo debe medir lo que suman los balines
-  const laneData = lanes.map((lane) => {
-    const perimeter = lane.reduce((s, b) => s + b.size * scale, 0);
-    const needed = perimeter / (2 * Math.PI);
-    return { lane, radius: Math.max(size * 0.11, needed) };
-  });
-
-  // escalar todo si no cabe
-  const biggest = laneData.reduce(
-    (m, l) => Math.max(m, l.radius + (Math.max(...l.lane.map((b) => b.size)) * scale) / 2),
-    0,
+  // radio natural de cada carril (los balines se tocan entre si)
+  const needed = lanes.map(
+    (lane) => lane.reduce((s, b) => s + b.size * scale, 0) / (2 * Math.PI),
   );
-  const fit = biggest > maxRadius ? maxRadius / biggest : 1;
+  const maxNeeded = Math.max(...needed);
+  const maxBead = Math.max(...beads.map((b) => b.size)) * scale;
 
-  // separación entre carriles concéntricos
-  laneData.forEach((l, idx) => {
-    l.radius = l.radius * fit + idx * 6 * scale;
-  });
+  // el aro exterior siempre ocupa la misma zona del lienzo
+  const targetRadius = size * 0.33;
+  const fit = Math.min(
+    Math.max(targetRadius / maxNeeded, 0.35),
+    (size * 0.44 - maxBead / 2) / maxNeeded,
+    3.2,
+  );
+
+  const laneData = lanes.map((lane, i) => ({ lane, radius: needed[i]! * fit }));
 
   laneData.forEach(({ lane, radius }) => {
-    // hilo / cordón
+    // hilo / cordon
     ctx.save();
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(190,160,90,0.55)";
+    ctx.strokeStyle = "rgba(190,160,90,0.5)";
     ctx.lineWidth = Math.max(1.5, 2.5 * scale);
     ctx.stroke();
     ctx.restore();
@@ -275,10 +271,11 @@ export function drawBracelet(
       const a = angle + step / 2;
       const x = centerX + Math.cos(a) * radius;
       const y = centerY + Math.sin(a) * radius;
-      drawBead(ctx, x, y, d, bead.color, !!bead.type && bead.type === "NEO");
+      drawBead(ctx, x, y, d, bead.color, bead.type === "NEO");
       angle += step;
     });
   });
+
 
 }
 
