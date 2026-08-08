@@ -247,7 +247,7 @@ export function drawBracelet(
   const fit = Math.min(
     Math.max(targetRadius / maxNeeded, 0.35),
     (size * 0.44 - maxBead / 2) / maxNeeded,
-    3.2,
+    1.8,
   );
 
   const laneData = lanes.map((lane, i) => ({ lane, radius: needed[i]! * fit }));
