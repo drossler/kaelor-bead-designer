@@ -280,11 +280,6 @@ export function drawBracelet(
     });
   });
 
-  // cierre / nudo macramé decorativo en el carril exterior
-  const outer = laneData[laneData.length - 1]!;
-  ctx.save();
-  ctx.translate(centerX, centerY + outer.radius);
-  ctx.restore();
 }
 
 
