@@ -95,17 +95,113 @@ function orderBeads(beads: Bead[], pattern: Pattern): Bead[] {
   return beads;
 }
 
-function radiusFor(pattern: Pattern, i: number, total: number, scale: number): number {
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+}
+
+function shade(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const mix = (c: number) =>
+    Math.round(amount >= 0 ? c + (255 - c) * amount : c * (1 + amount));
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+/** Split beads into concentric lanes according to the pattern */
+function lanesFor(beads: Bead[], pattern: Pattern): Bead[][] {
   if (pattern === "2carriles") {
-    return (i < Math.ceil(total / 2) ? 65 : 90) * scale;
+    const half = Math.ceil(beads.length / 2);
+    return [beads.slice(0, half), beads.slice(half)].filter((l) => l.length > 0);
   }
   if (pattern === "3carriles") {
-    const third = Math.ceil(total / 3);
-    if (i < third) return 55 * scale;
-    if (i < third * 2) return 75 * scale;
-    return 95 * scale;
+    const third = Math.ceil(beads.length / 3);
+    return [beads.slice(0, third), beads.slice(third, third * 2), beads.slice(third * 2)].filter(
+      (l) => l.length > 0,
+    );
   }
-  return 70 * scale;
+  return [beads];
+}
+
+function drawBead(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  d: number,
+  color: string,
+  matte: boolean,
+) {
+  const r = d / 2;
+
+  // sombra bajo el balín
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.15, y + r * 0.45, r * 0.85, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.filter = "blur(2px)";
+  ctx.fill();
+  ctx.restore();
+
+  // cuerpo esférico
+  const grad = ctx.createRadialGradient(
+    x - r * 0.35,
+    y - r * 0.4,
+    r * 0.05,
+    x,
+    y,
+    r * 1.05,
+  );
+  if (matte) {
+    grad.addColorStop(0, shade(color, 0.45));
+    grad.addColorStop(0.45, shade(color, 0.1));
+    grad.addColorStop(1, "#000000");
+  } else {
+    grad.addColorStop(0, shade(color, 0.75));
+    grad.addColorStop(0.3, shade(color, 0.25));
+    grad.addColorStop(0.72, color);
+    grad.addColorStop(1, shade(color, -0.62));
+  }
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // luz de rebote inferior (metal)
+  if (!matte) {
+    const bounce = ctx.createRadialGradient(
+      x + r * 0.25,
+      y + r * 0.55,
+      0,
+      x + r * 0.25,
+      y + r * 0.55,
+      r * 0.7,
+    );
+    bounce.addColorStop(0, "rgba(255,225,150,0.55)");
+    bounce.addColorStop(1, "rgba(255,225,150,0)");
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = bounce;
+    ctx.fill();
+  }
+
+  // brillo especular
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.33, y - r * 0.38, r * 0.26, r * 0.18, -0.6, 0, Math.PI * 2);
+  ctx.fillStyle = matte ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.85)";
+  ctx.fill();
+  ctx.restore();
+
+  // borde sutil
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.99, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = Math.max(0.5, r * 0.06);
+  ctx.stroke();
 }
 
 export function drawBracelet(
@@ -118,7 +214,12 @@ export function drawBracelet(
   if (!ctx) return;
   const scale = size / 400;
   ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = "#1a1a1a";
+
+  // fondo con viñeta
+  const bg = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.75);
+  bg.addColorStop(0, "#242424");
+  bg.addColorStop(1, "#111111");
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, size, size);
 
   const centerX = size / 2;
@@ -133,31 +234,51 @@ export function drawBracelet(
   }
 
   const beads = orderBeads(beadsInput, pattern);
-  const total = beads.length;
+  const lanes = lanesFor(beads, pattern);
+  // radio natural de cada carril (los balines se tocan entre si)
+  const needed = lanes.map(
+    (lane) => lane.reduce((s, b) => s + b.size * scale, 0) / (2 * Math.PI),
+  );
+  const maxNeeded = Math.max(...needed);
+  const maxBead = Math.max(...beads.map((b) => b.size)) * scale;
 
-  beads.forEach((bead, i) => {
-    const radius = radiusFor(pattern, i, total, scale);
-    const angle = (i * 360) / total;
-    const x = centerX + Math.cos((angle * Math.PI) / 180) * radius;
-    const y = centerY + Math.sin((angle * Math.PI) / 180) * radius;
-    const d = bead.size * scale;
+  // el aro exterior siempre ocupa la misma zona del lienzo
+  const targetRadius = size * 0.33;
+  const fit = Math.min(
+    Math.max(targetRadius / maxNeeded, 0.35),
+    (size * 0.44 - maxBead / 2) / maxNeeded,
+    1.8,
+  );
 
+  const laneData = lanes.map((lane, i) => ({ lane, radius: needed[i]! * fit }));
+
+  laneData.forEach(({ lane, radius }) => {
+    // hilo / cordon
     ctx.save();
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
     ctx.beginPath();
-    ctx.arc(x, y, d / 2, 0, Math.PI * 2);
-    ctx.fillStyle = bead.color;
-    ctx.fill();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(190,160,90,0.5)";
+    ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+    ctx.stroke();
     ctx.restore();
 
-    // reflejo dorado
-    ctx.beginPath();
-    ctx.arc(x - d * 0.18, y - d * 0.18, (d / 2) * 0.2, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 215, 0, 0.75)";
-    ctx.fill();
+    const perimeter = lane.reduce((s, b) => s + b.size * scale * fit, 0);
+    let angle = -Math.PI / 2;
+
+    lane.forEach((bead) => {
+      const d = bead.size * scale * fit;
+      const step = (d / perimeter) * Math.PI * 2;
+      const a = angle + step / 2;
+      const x = centerX + Math.cos(a) * radius;
+      const y = centerY + Math.sin(a) * radius;
+      drawBead(ctx, x, y, d, bead.color, bead.type === "NEO");
+      angle += step;
+    });
   });
+
+
 }
+
 
 export type SavedBracelet = {
   id: string;
