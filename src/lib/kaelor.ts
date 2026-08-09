@@ -204,6 +204,45 @@ function drawBead(
   ctx.stroke();
 }
 
+/** Cordón macramé (nudos en zig-zag) sobre un arco */
+function drawMacrame(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  from: number,
+  to: number,
+  width: number,
+) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, from, to);
+  ctx.strokeStyle = "#8E1A1A";
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, from, to);
+  ctx.strokeStyle = "#C62828";
+  ctx.lineWidth = width * 0.7;
+  ctx.stroke();
+
+  // nudos
+  const step = Math.max(0.06, width / radius / 1.6);
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = Math.max(1, width * 0.14);
+  for (let a = from; a <= to; a += step) {
+    const r1 = radius - width * 0.34;
+    const r2 = radius + width * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    ctx.lineTo(cx + Math.cos(a + step * 0.6) * r2, cy + Math.sin(a + step * 0.6) * r2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawBracelet(
   canvas: HTMLCanvasElement,
   beadsInput: Bead[],
@@ -235,39 +274,57 @@ export function drawBracelet(
 
   const beads = orderBeads(beadsInput, pattern);
   const lanes = lanesFor(beads, pattern);
-  // radio natural de cada carril (los balines se tocan entre si)
-  const needed = lanes.map(
-    (lane) => lane.reduce((s, b) => s + b.size * scale, 0) / (2 * Math.PI),
+  const laneCount = lanes.length;
+
+  const baseRadius = size * 0.3;
+  const avgBead = (beads.reduce((s, b) => s + b.size, 0) / beads.length) * scale;
+
+  // factor de tamaño: los balines se ven grandes pero el arco no puede pasar de ~250°
+  const maxArc = Math.PI * 1.35;
+  const longest = Math.max(
+    ...lanes.map((lane) => lane.reduce((s, b) => s + b.size * scale, 0)),
   );
-  const maxNeeded = Math.max(...needed);
-  const maxBead = Math.max(...beads.map((b) => b.size)) * scale;
+  const fit = Math.min(1.9, Math.max(0.3, (maxArc * baseRadius) / longest));
 
-  // el aro exterior siempre ocupa la misma zona del lienzo
-  const targetRadius = size * 0.33;
-  const fit = Math.min(
-    Math.max(targetRadius / maxNeeded, 0.35),
-    (size * 0.44 - maxBead / 2) / maxNeeded,
-    1.8,
+  const rowSpacing = avgBead * fit * 0.95;
+  const laneRadius = (i: number) => baseRadius + (i - (laneCount - 1) / 2) * rowSpacing;
+
+  // cordón macramé: recorre toda la manilla
+  const cordRadius = baseRadius;
+  const beadArc = (longest * fit) / baseRadius;
+  const bottom = Math.PI / 2;
+  const startBead = bottom - beadArc / 2;
+  const endBead = bottom + beadArc / 2;
+
+  drawMacrame(
+    ctx,
+    centerX,
+    centerY,
+    cordRadius,
+    endBead,
+    startBead + Math.PI * 2,
+    Math.max(6 * scale, rowSpacing * 0.55),
   );
 
-  const laneData = lanes.map((lane, i) => ({ lane, radius: needed[i]! * fit }));
+  // hilo rojo que atraviesa la zona de balines
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, cordRadius, startBead, endBead);
+  ctx.strokeStyle = "#B71C1C";
+  ctx.lineWidth = Math.max(2, 3 * scale);
+  ctx.stroke();
+  ctx.restore();
 
-  laneData.forEach(({ lane, radius }) => {
-    // hilo / cordon
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(190,160,90,0.5)";
-    ctx.lineWidth = Math.max(1.5, 2.5 * scale);
-    ctx.stroke();
-    ctx.restore();
-
-    const perimeter = lane.reduce((s, b) => s + b.size * scale * fit, 0);
-    let angle = -Math.PI / 2;
+  // carriles de balines (filas paralelas), centrados abajo
+  lanes.forEach((lane, i) => {
+    const radius = laneRadius(i);
+    const total = lane.reduce((s, b) => s + b.size * scale * fit, 0);
+    const span = total / radius;
+    let angle = bottom - span / 2;
 
     lane.forEach((bead) => {
       const d = bead.size * scale * fit;
-      const step = (d / perimeter) * Math.PI * 2;
+      const step = d / radius;
       const a = angle + step / 2;
       const x = centerX + Math.cos(a) * radius;
       const y = centerY + Math.sin(a) * radius;
@@ -275,9 +332,8 @@ export function drawBracelet(
       angle += step;
     });
   });
-
-
 }
+
 
 
 export type SavedBracelet = {
