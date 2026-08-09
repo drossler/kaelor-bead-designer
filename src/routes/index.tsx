@@ -472,9 +472,15 @@ function Index() {
             {macrame && (
               <p>
                 <span className="text-gold">1×</span> Rollo Celular/Macramé (
-                {formatCOP(MACRAME_PRICE)})
+                {formatCOP(macramePrice)})
               </p>
             )}
+            {extras.map((ex) => (
+              <p key={ex.id}>
+                <span className="text-gold">1×</span> {ex.name} ({formatCOP(ex.price)})
+              </p>
+            ))}
+
             <div className="my-2 h-px bg-gold" />
             <p>
               Total de balinés: <span className="text-gold">{totalBeads}</span>
