@@ -36,11 +36,17 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+type Extra = { id: string; name: string; price: number };
+
 function Index() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
   const [pattern, setPattern] = useState<Pattern>("sencillo");
   const [macrame, setMacrame] = useState(true);
+  const [macramePrice, setMacramePrice] = useState<number>(MACRAME_PRICE);
+  const [extras, setExtras] = useState<Extra[]>([]);
+  const [extraName, setExtraName] = useState("");
+  const [extraPrice, setExtraPrice] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedBracelet[]>([]);
   const [drawing, setDrawing] = useState(false);
@@ -66,12 +72,18 @@ function Index() {
   const beads = useMemo(() => expandCart(cart), [cart]);
   const totalBeads = beads.length;
 
+  const extrasTotal = useMemo(
+    () => extras.reduce((s, e) => s + (Number.isFinite(e.price) ? e.price : 0), 0),
+    [extras],
+  );
+
   const costTotal = useMemo(
-    () => beads.reduce((s, b) => s + b.price, 0) + (macrame ? MACRAME_PRICE : 0),
-    [beads, macrame],
+    () => beads.reduce((s, b) => s + b.price, 0) + (macrame ? macramePrice : 0) + extrasTotal,
+    [beads, macrame, macramePrice, extrasTotal],
   );
   const salePrice = costTotal * 2;
   const profit = salePrice - costTotal;
+
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
