@@ -28,32 +28,38 @@ function Tube({ points, radius = 0.055, color = RED }: { points: THREE.Vector3[]
 
 function MacrameArc() {
   const arcPoints = useMemo(() => {
-    const points: THREE.Vector3[] = [];
-    for (let i = 0; i <= 80; i += 1) {
-      const t = i / 80;
-      const angle = THREE.MathUtils.lerp(Math.PI * 0.07, Math.PI * 0.93, t);
-      points.push(new THREE.Vector3(Math.cos(angle) * 3.18, Math.sin(angle) * 2.25 + 0.2, -0.05));
-    }
-    return points;
+    return [
+      new THREE.Vector3(-2.34, -0.86, -0.06),
+      new THREE.Vector3(-2.72, 0.1, -0.1),
+      new THREE.Vector3(-2.28, 1.58, -0.18),
+      new THREE.Vector3(-1.18, 2.18, -0.2),
+      new THREE.Vector3(0, 2.3, -0.2),
+      new THREE.Vector3(1.18, 2.18, -0.2),
+      new THREE.Vector3(2.28, 1.58, -0.18),
+      new THREE.Vector3(2.72, 0.1, -0.1),
+      new THREE.Vector3(2.34, -0.86, -0.06),
+    ];
   }, []);
 
   const knots = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3(arcPoints, false, "centripetal");
     return Array.from({ length: 42 }, (_, i) => {
       const t = (i + 0.5) / 42;
-      const angle = THREE.MathUtils.lerp(Math.PI * 0.07, Math.PI * 0.93, t);
+      const point = curve.getPointAt(t);
+      const tangent = curve.getTangentAt(t);
       return {
-        position: [Math.cos(angle) * 3.18, Math.sin(angle) * 2.25 + 0.2, -0.04] as [number, number, number],
-        rotation: [Math.PI / 2, 0, angle + Math.PI / 2] as [number, number, number],
+        position: [point.x, point.y, point.z + 0.015] as [number, number, number],
+        rotation: [Math.PI / 2, 0, Math.atan2(tangent.y, tangent.x)] as [number, number, number],
       };
     });
-  }, []);
+  }, [arcPoints]);
 
   return (
     <group>
-      <Tube points={arcPoints} radius={0.105} />
+      <Tube points={arcPoints} radius={0.095} />
       {knots.map((k, index) => (
         <mesh key={index} position={k.position} rotation={k.rotation} castShadow>
-          <torusGeometry args={[0.12, 0.036, 6, 12]} />
+          <torusGeometry args={[0.105, 0.034, 6, 12]} />
           <meshStandardMaterial color={index % 2 ? RED : RED_LIGHT} roughness={0.65} />
         </mesh>
       ))}
@@ -138,13 +144,14 @@ function BeadedFront({ beads, pattern }: Bracelet3DProps) {
   return (
     <group>
       {lanes.map((lane, laneIndex) => {
-        const y = -1.14 + (laneIndex - (laneCount - 1) / 2) * 0.48;
+        const y = -1.12 + (laneIndex - (laneCount - 1) / 2) * 0.34;
+        const halfSpan = Math.min(2.2, Math.max(0, (lane.length - 1) * 0.205));
         return lane.map((bead, index) => {
           const normalized = lane.length === 1 ? 0.5 : index / (lane.length - 1);
-          const x = THREE.MathUtils.lerp(-2.85, 2.85, normalized);
-          const curve = 0.3 * Math.pow(x / 2.85, 2);
+          const x = THREE.MathUtils.lerp(-halfSpan, halfSpan, normalized);
+          const curve = 0.24 * Math.pow(x / 2.2, 2);
           const z = 0.18 - curve * 0.12 + (laneIndex === Math.floor(laneCount / 2) ? 0.12 : 0);
-          const centeredOffset = ((maxLength - lane.length) / Math.max(maxLength - 1, 1)) * 0.16;
+          const centeredOffset = ((maxLength - lane.length) / Math.max(maxLength - 1, 1)) * 0.08;
           return (
             <BeadMesh
               key={`${laneIndex}-${index}-${bead.type}`}
@@ -157,9 +164,9 @@ function BeadedFront({ beads, pattern }: Bracelet3DProps) {
       })}
       {[-1, 1].map((offset) => {
         const points = [
-          new THREE.Vector3(-3.02, -0.82 + offset * 0.16, -0.02),
-          new THREE.Vector3(0, -1.13 + offset * 0.24, 0.02),
-          new THREE.Vector3(3.02, -0.82 + offset * 0.16, -0.02),
+          new THREE.Vector3(-2.34, -0.86 + offset * 0.15, -0.02),
+          new THREE.Vector3(0, -1.13 + offset * 0.17, 0.02),
+          new THREE.Vector3(2.34, -0.86 + offset * 0.15, -0.02),
         ];
         return <Tube key={offset} points={points} radius={0.035} color={RED_LIGHT} />;
       })}
