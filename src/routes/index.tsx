@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   BEAD_TYPES,
   MACRAME_PRICE,
   PATTERNS,
   STORAGE_KEY,
-  drawBracelet,
   expandCart,
   formatCOP,
   patternLabel,
@@ -13,6 +12,8 @@ import {
   type Pattern,
   type SavedBracelet,
 } from "@/lib/kaelor";
+
+const Bracelet3D = lazy(() => import("@/components/Bracelet3D"));
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,24 +50,16 @@ function Index() {
   const [extraPrice, setExtraPrice] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedBracelet[]>([]);
-  const [drawing, setDrawing] = useState(false);
-  const [canvasSize, setCanvasSize] = useState(400);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    setHydrated(true);
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setHistory(JSON.parse(raw) as SavedBracelet[]);
     } catch {
       /* ignore */
     }
-  }, []);
-
-  useEffect(() => {
-    const apply = () => setCanvasSize(window.innerWidth < 768 ? 300 : 400);
-    apply();
-    window.addEventListener("resize", apply);
-    return () => window.removeEventListener("resize", apply);
   }, []);
 
   const beads = useMemo(() => expandCart(cart), [cart]);
@@ -83,22 +76,6 @@ function Index() {
   );
   const salePrice = costTotal * 2;
   const profit = salePrice - costTotal;
-
-
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    drawBracelet(canvas, beads, pattern, canvasSize);
-  }, [beads, pattern, canvasSize]);
-
-  useEffect(() => {
-    if (totalBeads > 50) setDrawing(true);
-    const t = setTimeout(() => {
-      draw();
-      setDrawing(false);
-    }, 100);
-    return () => clearTimeout(t);
-  }, [draw, totalBeads, macrame]);
 
   const flash = (msg: string) => {
     setFeedback(msg);
@@ -415,25 +392,28 @@ function Index() {
 
         {/* PANEL DERECHO */}
         <section className="flex flex-col gap-4">
-          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Previsualización</h2>
+          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Modelo 3D</h2>
 
-          <div className="k-card k-fade-in flex flex-col items-center">
-            <div className="relative">
-              <canvas
-                id="braceletCanvas"
-                ref={canvasRef}
-                width={canvasSize}
-                height={canvasSize}
-                aria-label="Previsualización de la manilla"
-                className="rounded-md border-2 border-gold bg-ink"
-              />
-              {drawing && (
-                <div className="absolute inset-0 grid place-items-center rounded-md bg-black/50">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-                </div>
+          <div className="k-card k-fade-in flex flex-col items-center overflow-hidden p-0">
+            <div className="relative h-[390px] w-full md:h-[560px]">
+              {hydrated ? (
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center bg-ink">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+                    </div>
+                  }
+                >
+                  <Bracelet3D beads={beads} pattern={pattern} />
+                </Suspense>
+              ) : (
+                <div className="h-full bg-ink" />
               )}
+              <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-gold/40 bg-ink/80 px-3 py-1.5 text-center text-[10px] text-text-soft backdrop-blur-sm">
+                Arrastra para girar · Pellizca para acercar
+              </div>
             </div>
-            <p className="mt-2 text-[12px] text-text-soft">
+            <p className="w-full border-t border-gold/30 px-4 py-3 text-center text-[12px] text-text-soft">
               Total: <span className="text-gold">{totalBeads}</span> balinés
             </p>
             {totalBeads > 100 && (
@@ -442,7 +422,7 @@ function Index() {
               </p>
             )}
 
-            <div className="mt-4 grid w-full grid-cols-2 gap-2">
+            <div className="grid w-full grid-cols-2 gap-2 px-4 pb-4">
               {BEAD_TYPES.map((b) => (
                 <div
                   key={b.id}
@@ -462,7 +442,8 @@ function Index() {
             <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-gold">COMPOSICIÓN</h3>
             {cart.length === 0 && <p>Sin balinés seleccionados.</p>}
             {cart.map((c) => {
-              const t = BEAD_TYPES.find((b) => b.id === c.typeId)!;
+              const t = BEAD_TYPES.find((b) => b.id === c.typeId);
+              if (!t) return null;
               return (
                 <p key={c.typeId}>
                   <span className="text-gold">{c.qty}×</span> {t.name} ({formatCOP(t.price)} c/u)
