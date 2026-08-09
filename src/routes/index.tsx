@@ -289,7 +289,7 @@ function Index() {
             <h3 className="mb-3 text-[13px] font-semibold tracking-wide text-gold">
               INSUMOS ADICIONALES
             </h3>
-            <label className="flex cursor-pointer items-center gap-3 text-[13px]">
+            <div className="flex items-center gap-3 text-[13px]">
               <input
                 type="checkbox"
                 checked={macrame}
@@ -297,10 +297,77 @@ function Index() {
                 aria-label="Rollo Celular o Macramé"
                 className="h-5 w-5 cursor-pointer accent-[#FFD700]"
               />
-              <span>
-                Rollo Celular/Macramé - <span className="text-gold">{formatCOP(MACRAME_PRICE)}</span>
-              </span>
-            </label>
+              <span className="flex-1">Rollo Celular/Macramé</span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                aria-label="Precio de Rollo Celular o Macramé"
+                className="k-input w-[110px] text-[12px]"
+                value={macramePrice}
+                onChange={(e) =>
+                  setMacramePrice(parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10))
+                }
+              />
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2">
+              {extras.map((ex) => (
+                <div key={ex.id} className="flex items-center gap-2 text-[13px]">
+                  <input
+                    aria-label="Nombre del insumo"
+                    className="k-input flex-1 text-[12px]"
+                    value={ex.name}
+                    onChange={(e) => updateExtra(ex.id, { name: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    aria-label={`Precio de ${ex.name}`}
+                    className="k-input w-[110px] text-[12px]"
+                    value={ex.price}
+                    onChange={(e) =>
+                      updateExtra(ex.id, {
+                        price: parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10),
+                      })
+                    }
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Eliminar ${ex.name}`}
+                    onClick={() => removeExtra(ex.id)}
+                    className="cursor-pointer px-2 text-gold hover:text-gold-bright"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                aria-label="Nombre del nuevo insumo"
+                placeholder="Ej: Herrajes"
+                className="k-input flex-1 text-[12px]"
+                value={extraName}
+                onChange={(e) => setExtraName(e.target.value)}
+              />
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                placeholder="Costo"
+                aria-label="Precio del nuevo insumo"
+                className="k-input w-full text-[12px] sm:w-[110px]"
+                value={extraPrice}
+                onChange={(e) => setExtraPrice(e.target.value.replace(/[^0-9]/g, ""))}
+              />
+              <button type="button" onClick={addExtra} className="k-btn px-3 py-2 text-[12px]">
+                + Agregar insumo
+              </button>
+            </div>
+
           </div>
 
           <div className="k-fade-in grid grid-cols-2 gap-3 lg:grid-cols-4">
