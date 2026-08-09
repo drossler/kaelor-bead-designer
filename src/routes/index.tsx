@@ -128,14 +128,35 @@ function Index() {
       .map((c) => `${c.qty}×${c.typeId}`)
       .join(" + ");
 
+  const addExtra = () => {
+    const name = extraName.trim();
+    const price = parseInt(extraPrice.replace(/[^0-9]/g, "") || "0", 10);
+    if (!name) {
+      flash("Escribe el nombre del insumo");
+      return;
+    }
+    setExtras((p) => [...p, { id: `${Date.now()}`, name, price }]);
+    setExtraName("");
+    setExtraPrice("");
+    flash(`✅ ${name} agregado`);
+  };
+
+  const updateExtra = (id: string, patch: Partial<Extra>) =>
+    setExtras((p) => p.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+
+  const removeExtra = (id: string) => setExtras((p) => p.filter((e) => e.id !== id));
+
   const clearAll = () => {
-    if (totalBeads === 0) return;
+    if (totalBeads === 0 && extras.length === 0) return;
     if (!window.confirm("¿Seguro que deseas limpiar la manilla actual?")) return;
     setCart([]);
     setPattern("sencillo");
     setMacrame(true);
+    setMacramePrice(MACRAME_PRICE);
+    setExtras([]);
     flash("Composición limpiada");
   };
+
 
   const save = () => {
     if (totalBeads === 0) return;
