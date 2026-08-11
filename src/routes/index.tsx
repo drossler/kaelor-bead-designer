@@ -50,10 +50,8 @@ function Index() {
   const [extraPrice, setExtraPrice] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedBracelet[]>([]);
-  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setHydrated(true);
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setHistory(JSON.parse(raw) as SavedBracelet[]);
