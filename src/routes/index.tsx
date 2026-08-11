@@ -1,19 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BEAD_TYPES,
   MACRAME_PRICE,
   PATTERNS,
-  STORAGE_KEY,
-  expandCart,
   formatCOP,
   patternLabel,
   type CartItem,
   type Pattern,
-  type SavedBracelet,
 } from "@/lib/kaelor";
+import {
+  deleteBracelet,
+  fetchBracelets,
+  fetchMaterials,
+  findMaterial,
+  saveBraceletWithStock,
+  type BraceletRow,
+  type Material,
+} from "@/lib/inventory";
 
-
+export const MACRAME_MATERIAL = "Rollo Celular/Macramé";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,7 +28,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Diseña manillas personalizadas con balines italianos, calcula costos, precio de venta y previsualiza el patrón en tiempo real.",
+          "Diseña manillas personalizadas con balines italianos, calcula costos, precio de venta y descuenta el inventario en tiempo real.",
       },
       { property: "og:title", content: "KAELOR Joyería · Calculadora de Manillas" },
       {
@@ -37,7 +43,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Extra = { id: string; name: string; price: number };
+type Extra = { id: string; name: string; price: number; qty: number };
 
 function Index() {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -49,29 +55,58 @@ function Index() {
   const [extraName, setExtraName] = useState("");
   const [extraPrice, setExtraPrice] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [history, setHistory] = useState<SavedBracelet[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [history, setHistory] = useState<BraceletRow[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const reload = useCallback(async () => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setHistory(JSON.parse(raw) as SavedBracelet[]);
-    } catch {
-      /* ignore */
+      const [m, b] = await Promise.all([fetchMaterials(), fetchBracelets()]);
+      setMaterials(m);
+      setHistory(b);
+      const mac = findMaterial(m, MACRAME_MATERIAL);
+      if (mac) setMacramePrice(mac.unit_cost);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Error cargando inventario");
     }
   }, []);
 
-  const beads = useMemo(() => expandCart(cart), [cart]);
-  const totalBeads = beads.length;
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const priceOf = useCallback(
+    (name: string, fallback: number) => {
+      const m = findMaterial(materials, name);
+      return m && m.unit_cost > 0 ? m.unit_cost : fallback;
+    },
+    [materials],
+  );
+
+  const stockOf = useCallback(
+    (name: string) => findMaterial(materials, name)?.stock ?? null,
+    [materials],
+  );
+
+  const totalBeads = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
+
+  const beadsCost = useMemo(
+    () =>
+      cart.reduce((s, c) => {
+        const t = BEAD_TYPES.find((b) => b.id === c.typeId);
+        if (!t) return s;
+        return s + c.qty * priceOf(t.name, t.price);
+      }, 0),
+    [cart, priceOf],
+  );
 
   const extrasTotal = useMemo(
-    () => extras.reduce((s, e) => s + (Number.isFinite(e.price) ? e.price : 0), 0),
+    () => extras.reduce((s, e) => s + (Number.isFinite(e.price) ? e.price * e.qty : 0), 0),
     [extras],
   );
 
-  const costTotal = useMemo(
-    () => beads.reduce((s, b) => s + b.price, 0) + (macrame ? macramePrice : 0) + extrasTotal,
-    [beads, macrame, macramePrice, extrasTotal],
-  );
+  const costTotal = beadsCost + (macrame ? macramePrice : 0) + extrasTotal;
   const salePrice = costTotal * 2;
   const profit = salePrice - costTotal;
 
@@ -110,7 +145,10 @@ function Index() {
       flash("Escribe el nombre del insumo");
       return;
     }
-    setExtras((p) => [...p, { id: `${Date.now()}`, name, price }]);
+    setExtras((p) => [
+      ...p,
+      { id: `${Date.now()}`, name, price: price || priceOf(name, 0), qty: 1 },
+    ]);
     setExtraName("");
     setExtraPrice("");
     flash(`✅ ${name} agregado`);
@@ -127,41 +165,76 @@ function Index() {
     setCart([]);
     setPattern("sencillo");
     setMacrame(true);
-    setMacramePrice(MACRAME_PRICE);
     setExtras([]);
+    setErrorMsg(null);
     flash("Composición limpiada");
   };
 
+  const save = async () => {
+    if (totalBeads === 0 || saving) return;
+    setErrorMsg(null);
 
-  const save = () => {
-    if (totalBeads === 0) return;
-    const entry: SavedBracelet = {
-      id: `${Date.now()}`,
-      composition: compositionText(),
-      pattern: patternLabel(pattern),
-      cost: costTotal,
-      price: salePrice,
-      profit,
-      timestamp: Date.now(),
-    };
-    const next = [entry, ...history].slice(0, 20);
-    setHistory(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
+    const needed: { name: string; qty: number }[] = [];
+    for (const c of cart) {
+      const t = BEAD_TYPES.find((b) => b.id === c.typeId);
+      if (t && c.qty > 0) needed.push({ name: t.name, qty: c.qty });
     }
-    setCart([]);
-    flash("✅ Manilla guardada");
+    if (macrame) needed.push({ name: MACRAME_MATERIAL, qty: 1 });
+    for (const ex of extras) needed.push({ name: ex.name, qty: ex.qty });
+
+    const missing: string[] = [];
+    const short: string[] = [];
+    const items: { material_id: string; qty: number }[] = [];
+
+    for (const n of needed) {
+      const m = findMaterial(materials, n.name);
+      if (!m) {
+        missing.push(n.name);
+        continue;
+      }
+      if (m.stock < n.qty) short.push(`${m.name} (hay ${m.stock}, necesitas ${n.qty})`);
+      const existing = items.find((i) => i.material_id === m.id);
+      if (existing) existing.qty += n.qty;
+      else items.push({ material_id: m.id, qty: n.qty });
+    }
+
+    if (missing.length > 0) {
+      setErrorMsg(
+        `Estos materiales no existen en el inventario: ${missing.join(", ")}. Cárgalos con una factura.`,
+      );
+      return;
+    }
+    if (short.length > 0) {
+      setErrorMsg(`Stock insuficiente: ${short.join(" · ")}`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveBraceletWithStock({
+        composition: compositionText(),
+        pattern: patternLabel(pattern),
+        cost: costTotal,
+        price: salePrice,
+        items,
+      });
+      setCart([]);
+      setExtras([]);
+      await reload();
+      flash("✅ Manilla guardada y stock descontado");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "No se pudo guardar la manilla");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeSaved = (id: string) => {
-    const next = history.filter((h) => h.id !== id);
-    setHistory(next);
+  const removeSaved = async (id: string) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
+      await deleteBracelet(id);
+      setHistory((p) => p.filter((h) => h.id !== id));
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "No se pudo eliminar");
     }
   };
 
@@ -175,6 +248,9 @@ function Index() {
           KAELOR
         </h1>
         <p className="mt-1 text-[12px] tracking-[0.35em] text-gold-deep">JOYERÍA</p>
+        <Link to="/inventario" className="mt-3 inline-block text-[12px] text-gold underline">
+          Inventario y facturas →
+        </Link>
       </header>
 
       {feedback && (
@@ -194,41 +270,47 @@ function Index() {
           <div className="k-card k-fade-in">
             <h3 className="mb-3 text-[13px] font-semibold tracking-wide text-gold">BALINÉS</h3>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {BEAD_TYPES.map((b) => (
-                <div
-                  key={b.id}
-                  className="rounded-lg border-2 border-gold bg-surface p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
-                >
-                  <p className="text-[12px] font-semibold md:text-[13px]">{b.name}</p>
-                  <p className="text-[12px] text-gold">{formatCOP(b.price)}</p>
+              {BEAD_TYPES.map((b) => {
+                const stock = stockOf(b.name);
+                return (
                   <div
-                    className="my-2 h-[6px] w-full rounded-full"
-                    style={{ background: b.color }}
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={200}
-                    inputMode="numeric"
-                    aria-label={`Cantidad de ${b.name}`}
-                    className="k-input w-full text-[12px]"
-                    value={qtyInputs[b.id] ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^0-9]/g, "");
-                      setQtyInputs((p) => ({ ...p, [b.id]: v }));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Agregar ${b.name}`}
-                    onClick={() => addBead(b.id)}
-                    className="k-btn mt-2 w-full px-2 py-2 text-[12px]"
+                    key={b.id}
+                    className="rounded-lg border-2 border-gold bg-surface p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
                   >
-                    + Agregar
-                  </button>
-                </div>
-              ))}
+                    <p className="text-[12px] font-semibold md:text-[13px]">{b.name}</p>
+                    <p className="text-[12px] text-gold">{formatCOP(priceOf(b.name, b.price))}</p>
+                    <p className="text-[11px] text-text-soft">
+                      Stock: {stock === null ? "—" : stock}
+                    </p>
+                    <div
+                      className="my-2 h-[6px] w-full rounded-full"
+                      style={{ background: b.color }}
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={200}
+                      inputMode="numeric"
+                      aria-label={`Cantidad de ${b.name}`}
+                      className="k-input w-full text-[12px]"
+                      value={qtyInputs[b.id] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        setQtyInputs((p) => ({ ...p, [b.id]: v }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Agregar ${b.name}`}
+                      onClick={() => addBead(b.id)}
+                      className="k-btn mt-2 w-full px-2 py-2 text-[12px]"
+                    >
+                      + Agregar
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -272,7 +354,12 @@ function Index() {
                 aria-label="Rollo Celular o Macramé"
                 className="h-5 w-5 cursor-pointer accent-[#FFD700]"
               />
-              <span className="flex-1">Rollo Celular/Macramé</span>
+              <span className="flex-1">
+                {MACRAME_MATERIAL}
+                <span className="ml-2 text-[11px] text-text-soft">
+                  Stock: {stockOf(MACRAME_MATERIAL) ?? "—"}
+                </span>
+              </span>
               <input
                 type="number"
                 min={0}
@@ -294,6 +381,17 @@ function Index() {
                     className="k-input flex-1 text-[12px]"
                     value={ex.name}
                     onChange={(e) => updateExtra(ex.id, { name: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    aria-label={`Cantidad de ${ex.name}`}
+                    className="k-input w-[70px] text-[12px]"
+                    value={ex.qty}
+                    onChange={(e) =>
+                      updateExtra(ex.id, { qty: Math.max(1, Number(e.target.value) || 1) })
+                    }
                   />
                   <input
                     type="number"
@@ -324,10 +422,16 @@ function Index() {
               <input
                 aria-label="Nombre del nuevo insumo"
                 placeholder="Ej: Herrajes"
+                list="materiales-inventario"
                 className="k-input flex-1 text-[12px]"
                 value={extraName}
                 onChange={(e) => setExtraName(e.target.value)}
               />
+              <datalist id="materiales-inventario">
+                {materials.map((m) => (
+                  <option key={m.id} value={m.name} />
+                ))}
+              </datalist>
               <input
                 type="number"
                 min={0}
@@ -342,7 +446,6 @@ function Index() {
                 + Agregar insumo
               </button>
             </div>
-
           </div>
 
           <div className="k-fade-in grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -367,6 +470,12 @@ function Index() {
             ))}
           </div>
 
+          {errorMsg && (
+            <p className="rounded-md border-2 border-red-500 bg-surface p-3 text-[12px] text-red-400">
+              {errorMsg}
+            </p>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
@@ -378,12 +487,12 @@ function Index() {
             </button>
             <button
               type="button"
-              onClick={save}
-              disabled={totalBeads === 0}
+              onClick={() => void save()}
+              disabled={totalBeads === 0 || saving}
               aria-label="Guardar manilla"
               className="k-btn w-full py-[10px] text-[14px] sm:flex-1"
             >
-              Guardar
+              {saving ? "Guardando…" : "Guardar y descontar stock"}
             </button>
           </div>
         </section>
@@ -391,7 +500,6 @@ function Index() {
         {/* PANEL DERECHO */}
         <section className="flex flex-col gap-4">
           <h2 className="font-display text-[18px] text-gold md:text-[21px]">Resumen</h2>
-
 
           <div className="k-fade-in border-l-[3px] border-gold bg-surface p-[15px] text-[12px] text-text-soft">
             <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-gold">COMPOSICIÓN</h3>
@@ -401,19 +509,19 @@ function Index() {
               if (!t) return null;
               return (
                 <p key={c.typeId}>
-                  <span className="text-gold">{c.qty}×</span> {t.name} ({formatCOP(t.price)} c/u)
+                  <span className="text-gold">{c.qty}×</span> {t.name} (
+                  {formatCOP(priceOf(t.name, t.price))} c/u)
                 </p>
               );
             })}
             {macrame && (
               <p>
-                <span className="text-gold">1×</span> Rollo Celular/Macramé (
-                {formatCOP(macramePrice)})
+                <span className="text-gold">1×</span> {MACRAME_MATERIAL} ({formatCOP(macramePrice)})
               </p>
             )}
             {extras.map((ex) => (
               <p key={ex.id}>
-                <span className="text-gold">1×</span> {ex.name} ({formatCOP(ex.price)})
+                <span className="text-gold">{ex.qty}×</span> {ex.name} ({formatCOP(ex.price)})
               </p>
             ))}
 
@@ -439,7 +547,7 @@ function Index() {
                 <button
                   type="button"
                   aria-label="Eliminar manilla guardada"
-                  onClick={() => removeSaved(h.id)}
+                  onClick={() => void removeSaved(h.id)}
                   className="absolute right-2 top-2 cursor-pointer text-gold transition-all duration-300 hover:text-gold-bright"
                 >
                   ✕
