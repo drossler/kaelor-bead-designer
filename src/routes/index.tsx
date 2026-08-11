@@ -392,51 +392,8 @@ function Index() {
 
         {/* PANEL DERECHO */}
         <section className="flex flex-col gap-4">
-          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Modelo 3D</h2>
+          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Resumen</h2>
 
-          <div className="k-card k-fade-in flex flex-col items-center overflow-hidden p-0">
-            <div className="relative h-[390px] w-full md:h-[560px]">
-              {hydrated ? (
-                <Suspense
-                  fallback={
-                    <div className="grid h-full place-items-center bg-ink">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-                    </div>
-                  }
-                >
-                  <Bracelet3D beads={beads} pattern={pattern} />
-                </Suspense>
-              ) : (
-                <div className="h-full bg-ink" />
-              )}
-              <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-gold/40 bg-ink/80 px-3 py-1.5 text-center text-[10px] text-text-soft backdrop-blur-sm">
-                Arrastra para girar · Pellizca para acercar
-              </div>
-            </div>
-            <p className="w-full border-t border-gold/30 px-4 py-3 text-center text-[12px] text-text-soft">
-              Total: <span className="text-gold">{totalBeads}</span> balinés
-            </p>
-            {totalBeads > 100 && (
-              <p className="mt-1 text-[11px] text-gold-deep">
-                ⚠ Muchos balinés: la visualización puede ser lenta
-              </p>
-            )}
-
-            <div className="grid w-full grid-cols-2 gap-2 px-4 pb-4">
-              {BEAD_TYPES.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-[11px] transition-all duration-300 hover:shadow-[0_0_14px_rgba(212,175,55,0.3)]"
-                >
-                  <span
-                    className="inline-block h-[14px] w-[14px] shrink-0 rounded-full border border-gold"
-                    style={{ background: b.color }}
-                  />
-                  <span>{b.isNeopreno ? "Neo" : b.id}</span>
-                </div>
-              ))}
-            </div>
-          </div>
 
           <div className="k-fade-in border-l-[3px] border-gold bg-surface p-[15px] text-[12px] text-text-soft">
             <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-gold">COMPOSICIÓN</h3>
