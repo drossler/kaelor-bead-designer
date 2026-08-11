@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BEAD_TYPES,
   MACRAME_PRICE,
@@ -13,7 +13,7 @@ import {
   type SavedBracelet,
 } from "@/lib/kaelor";
 
-const Bracelet3D = lazy(() => import("@/components/Bracelet3D"));
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
