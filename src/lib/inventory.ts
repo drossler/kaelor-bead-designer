@@ -73,7 +73,7 @@ export async function applyInvoice(input: {
   const { error } = await supabase.rpc("apply_invoice", {
     p_invoice_number: input.invoiceNumber,
     p_supplier: input.supplier,
-    p_invoice_date: input.invoiceDate,
+    p_invoice_date: input.invoiceDate as string,
     p_items: input.items,
   });
   if (error) throw new Error(error.message);
