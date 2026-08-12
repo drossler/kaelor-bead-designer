@@ -132,6 +132,7 @@ export type Database = {
           invoice_date: string | null
           invoice_number: string
           supplier: string
+          supplier_id: string | null
           total: number
         }
         Insert: {
@@ -140,6 +141,7 @@ export type Database = {
           invoice_date?: string | null
           invoice_number: string
           supplier?: string
+          supplier_id?: string | null
           total?: number
         }
         Update: {
@@ -148,12 +150,80 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string
           supplier?: string
+          supplier_id?: string | null
           total?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "invoices_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      material_lots: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string | null
+          lot_date: string
+          material_id: string
+          qty_original: number
+          qty_remaining: number
+          supplier_id: string | null
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id?: string | null
+          lot_date?: string
+          material_id: string
+          qty_original?: number
+          qty_remaining?: number
+          supplier_id?: string | null
+          unit_cost?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string | null
+          lot_date?: string
+          material_id?: string
+          qty_original?: number
+          qty_remaining?: number
+          supplier_id?: string | null
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_lots_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_lots_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_lots_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       materials: {
         Row: {
+          category: string
           created_at: string
           id: string
           name: string
@@ -162,6 +232,7 @@ export type Database = {
           unit_cost: number
         }
         Insert: {
+          category?: string
           created_at?: string
           id?: string
           name: string
@@ -170,12 +241,31 @@ export type Database = {
           unit_cost?: number
         }
         Update: {
+          category?: string
           created_at?: string
           id?: string
           name?: string
           stock?: number
           unit?: string
           unit_cost?: number
+        }
+        Relationships: []
+      }
+      suppliers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
@@ -193,6 +283,16 @@ export type Database = {
         }
         Returns: string
       }
+      apply_invoice_fifo: {
+        Args: {
+          p_invoice_date: string
+          p_invoice_number: string
+          p_items: Json
+          p_supplier_id: string
+        }
+        Returns: string
+      }
+      infer_category: { Args: { p_name: string }; Returns: string }
       save_bracelet: {
         Args: {
           p_composition: string
@@ -200,6 +300,16 @@ export type Database = {
           p_items: Json
           p_pattern: string
           p_price: number
+        }
+        Returns: string
+      }
+      save_bracelet_fifo: {
+        Args: {
+          p_composition: string
+          p_extra_cost: number
+          p_items: Json
+          p_multiplier: number
+          p_pattern: string
         }
         Returns: string
       }
