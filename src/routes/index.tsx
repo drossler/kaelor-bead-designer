@@ -1,14 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  BEAD_TYPES,
-  MACRAME_PRICE,
-  PATTERNS,
-  formatCOP,
-  patternLabel,
-  type CartItem,
-  type Pattern,
-} from "@/lib/kaelor";
+import { MACRAME_PRICE, PATTERNS, formatCOP, patternLabel, type Pattern } from "@/lib/kaelor";
 import {
   deleteBracelet,
   fetchBracelets,
@@ -44,9 +36,44 @@ export const Route = createFileRoute("/")({
 });
 
 type Extra = { id: string; name: string; price: number; qty: number };
+type CartLine = { materialId: string; qty: number };
+
+const CATEGORIES = [
+  "Balinés Diamantados 18K",
+  "Balinés Italianos",
+  "Balinés Lisa",
+  "Balinés X",
+  "Neoprenos",
+  "Herrajes y Accesorios",
+  "Otros",
+] as const;
+
+function categoryOf(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("diamantad")) return "Balinés Diamantados 18K";
+  if (n.includes("italy") || n.includes("italian")) return "Balinés Italianos";
+  if (n.includes("neopren")) return "Neoprenos";
+  if (n.includes("lisa") || n.includes("liso")) return "Balinés Lisa";
+  if (/\bx\b/.test(n) || n.includes("balin x")) return "Balinés X";
+  if (
+    n.includes("herraje") ||
+    n.includes("cruz") ||
+    n.includes("clover") ||
+    n.includes("infinito") ||
+    n.includes("rx") ||
+    n.includes("dije") ||
+    n.includes("broche") ||
+    n.includes("cierre") ||
+    n.includes("rollo") ||
+    n.includes("macram") ||
+    n.includes("hilo")
+  )
+    return "Herrajes y Accesorios";
+  return "Otros";
+}
 
 function Index() {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
   const [pattern, setPattern] = useState<Pattern>("sencillo");
   const [macrame, setMacrame] = useState(true);
@@ -59,6 +86,8 @@ function Index() {
   const [history, setHistory] = useState<BraceletRow[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [saving, setSaving] = useState(false);
+  const [activeCat, setActiveCat] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -76,16 +105,34 @@ function Index() {
     void reload();
   }, [reload]);
 
-  const priceOf = useCallback(
-    (name: string, fallback: number) => {
-      const m = findMaterial(materials, name);
-      return m && m.unit_cost > 0 ? m.unit_cost : fallback;
-    },
-    [materials],
+  const grouped = useMemo(() => {
+    const map = new Map<string, Material[]>();
+    for (const m of materials) {
+      const c = categoryOf(m.name);
+      const arr = map.get(c) ?? [];
+      arr.push(m);
+      map.set(c, arr);
+    }
+    return map;
+  }, [materials]);
+
+  const availableCats = useMemo(
+    () => CATEGORIES.filter((c) => (grouped.get(c)?.length ?? 0) > 0),
+    [grouped],
   );
 
-  const stockOf = useCallback(
-    (name: string) => findMaterial(materials, name)?.stock ?? null,
+  useEffect(() => {
+    if (!activeCat && availableCats.length > 0) setActiveCat(availableCats[0]!);
+  }, [availableCats, activeCat]);
+
+  const visibleMaterials = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q) return materials.filter((m) => m.name.toLowerCase().includes(q));
+    return grouped.get(activeCat ?? "") ?? [];
+  }, [search, materials, grouped, activeCat]);
+
+  const materialById = useCallback(
+    (id: string) => materials.find((m) => m.id === id),
     [materials],
   );
 
@@ -94,11 +141,10 @@ function Index() {
   const beadsCost = useMemo(
     () =>
       cart.reduce((s, c) => {
-        const t = BEAD_TYPES.find((b) => b.id === c.typeId);
-        if (!t) return s;
-        return s + c.qty * priceOf(t.name, t.price);
+        const m = materialById(c.materialId);
+        return m ? s + c.qty * m.unit_cost : s;
       }, 0),
-    [cart, priceOf],
+    [cart, materialById],
   );
 
   const extrasTotal = useMemo(
@@ -115,27 +161,30 @@ function Index() {
     setTimeout(() => setFeedback(null), 2000);
   };
 
-  const addBead = (typeId: string) => {
-    const raw = qtyInputs[typeId] ?? "";
-    const qty = Math.min(200, Math.max(0, parseInt(raw || "0", 10) || 0));
+  const addMaterial = (m: Material) => {
+    const raw = qtyInputs[m.id] ?? "";
+    const qty = Math.min(500, Math.max(0, parseInt(raw || "0", 10) || 0));
     if (qty <= 0) {
       flash("Ingresa una cantidad mayor a 0");
       return;
     }
     setCart((prev) => {
-      const found = prev.find((c) => c.typeId === typeId);
+      const found = prev.find((c) => c.materialId === m.id);
       if (found)
-        return prev.map((c) => (c.typeId === typeId ? { ...c, qty: c.qty + qty } : c));
-      return [...prev, { typeId, qty }];
+        return prev.map((c) => (c.materialId === m.id ? { ...c, qty: c.qty + qty } : c));
+      return [...prev, { materialId: m.id, qty }];
     });
-    setQtyInputs((p) => ({ ...p, [typeId]: "" }));
-    flash(`✅ ${qty}× ${typeId} agregados`);
+    setQtyInputs((p) => ({ ...p, [m.id]: "" }));
+    flash(`✅ ${qty}× ${m.name} agregados`);
   };
+
+  const removeLine = (materialId: string) =>
+    setCart((p) => p.filter((c) => c.materialId !== materialId));
 
   const compositionText = () =>
     cart
       .filter((c) => c.qty > 0)
-      .map((c) => `${c.qty}×${c.typeId}`)
+      .map((c) => `${c.qty}×${materialById(c.materialId)?.name ?? "?"}`)
       .join(" + ");
 
   const addExtra = () => {
@@ -145,9 +194,10 @@ function Index() {
       flash("Escribe el nombre del insumo");
       return;
     }
+    const inv = findMaterial(materials, name);
     setExtras((p) => [
       ...p,
-      { id: `${Date.now()}`, name, price: price || priceOf(name, 0), qty: 1 },
+      { id: `${Date.now()}`, name, price: price || inv?.unit_cost || 0, qty: 1 },
     ]);
     setExtraName("");
     setExtraPrice("");
@@ -176,8 +226,8 @@ function Index() {
 
     const needed: { name: string; qty: number }[] = [];
     for (const c of cart) {
-      const t = BEAD_TYPES.find((b) => b.id === c.typeId);
-      if (t && c.qty > 0) needed.push({ name: t.name, qty: c.qty });
+      const m = materialById(c.materialId);
+      if (m && c.qty > 0) needed.push({ name: m.name, qty: c.qty });
     }
     if (macrame) needed.push({ name: MACRAME_MATERIAL, qty: 1 });
     for (const ex of extras) needed.push({ name: ex.name, qty: ex.qty });
@@ -265,52 +315,91 @@ function Index() {
       <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-3 md:p-5 lg:grid-cols-2">
         {/* PANEL IZQUIERDO */}
         <section className="flex flex-col gap-4">
-          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Selectores</h2>
+          <h2 className="font-display text-[18px] text-gold md:text-[21px]">Selecciona Materiales</h2>
 
           <div className="k-card k-fade-in">
-            <h3 className="mb-3 text-[13px] font-semibold tracking-wide text-gold">BALINÉS</h3>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {BEAD_TYPES.map((b) => {
-                const stock = stockOf(b.name);
+            <div className="mb-3 flex flex-wrap gap-2">
+              {availableCats.map((c) => {
+                const active = !search && activeCat === c;
                 return (
-                  <div
-                    key={b.id}
-                    className="rounded-lg border-2 border-gold bg-surface p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setActiveCat(c);
+                    }}
+                    className={
+                      "cursor-pointer rounded-md border-2 border-gold px-3 py-2 text-[12px] font-semibold transition-all duration-300 " +
+                      (active
+                        ? "bg-gradient-to-br from-gold to-gold-deep text-ink shadow-[0_6px_18px_rgba(212,175,55,0.45)]"
+                        : "bg-surface text-gold hover:shadow-[0_0_16px_rgba(212,175,55,0.35)]")
+                    }
                   >
-                    <p className="text-[12px] font-semibold md:text-[13px]">{b.name}</p>
-                    <p className="text-[12px] text-gold">{formatCOP(priceOf(b.name, b.price))}</p>
-                    <p className="text-[11px] text-text-soft">
-                      Stock: {stock === null ? "—" : stock}
-                    </p>
-                    <div
-                      className="my-2 h-[6px] w-full rounded-full"
-                      style={{ background: b.color }}
-                      aria-hidden="true"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      max={200}
-                      inputMode="numeric"
-                      aria-label={`Cantidad de ${b.name}`}
-                      className="k-input w-full text-[12px]"
-                      value={qtyInputs[b.id] ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/[^0-9]/g, "");
-                        setQtyInputs((p) => ({ ...p, [b.id]: v }));
-                      }}
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Agregar ${b.name}`}
-                      onClick={() => addBead(b.id)}
-                      className="k-btn mt-2 w-full px-2 py-2 text-[12px]"
-                    >
-                      + Agregar
-                    </button>
-                  </div>
+                    {c}{" "}
+                    <span className="opacity-70">({grouped.get(c)?.length ?? 0})</span>
+                  </button>
                 );
               })}
+            </div>
+
+            <input
+              aria-label="Buscar material"
+              placeholder="Buscar material…"
+              className="k-input mb-3 w-full text-[12px]"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+
+            {materials.length === 0 && (
+              <p className="text-[12px] text-text-soft">
+                No hay materiales en inventario. Carga una factura en{" "}
+                <Link to="/inventario" className="text-gold underline">
+                  Inventario
+                </Link>
+                .
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              {visibleMaterials.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-lg border-2 border-gold bg-surface p-3 transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                >
+                  <p className="text-[12px] font-semibold md:text-[13px]">{m.name}</p>
+                  <p className="text-[12px] text-gold">{formatCOP(m.unit_cost)}</p>
+                  <p
+                    className={
+                      "text-[11px] " + (m.stock <= 0 ? "text-red-400" : "text-text-soft")
+                    }
+                  >
+                    Stock: {m.stock}
+                  </p>
+                  <input
+                    type="number"
+                    min={0}
+                    max={500}
+                    inputMode="numeric"
+                    aria-label={`Cantidad de ${m.name}`}
+                    className="k-input mt-2 w-full text-[12px]"
+                    value={qtyInputs[m.id] ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, "");
+                      setQtyInputs((p) => ({ ...p, [m.id]: v }));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Agregar ${m.name}`}
+                    disabled={m.stock <= 0}
+                    onClick={() => addMaterial(m)}
+                    className="k-btn mt-2 w-full px-2 py-2 text-[12px] disabled:opacity-40"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -357,7 +446,7 @@ function Index() {
               <span className="flex-1">
                 {MACRAME_MATERIAL}
                 <span className="ml-2 text-[11px] text-text-soft">
-                  Stock: {stockOf(MACRAME_MATERIAL) ?? "—"}
+                  Stock: {findMaterial(materials, MACRAME_MATERIAL)?.stock ?? "—"}
                 </span>
               </span>
               <input
@@ -503,14 +592,24 @@ function Index() {
 
           <div className="k-fade-in border-l-[3px] border-gold bg-surface p-[15px] text-[12px] text-text-soft">
             <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-gold">COMPOSICIÓN</h3>
-            {cart.length === 0 && <p>Sin balinés seleccionados.</p>}
+            {cart.length === 0 && <p>Sin materiales seleccionados.</p>}
             {cart.map((c) => {
-              const t = BEAD_TYPES.find((b) => b.id === c.typeId);
-              if (!t) return null;
+              const m = materialById(c.materialId);
+              if (!m) return null;
               return (
-                <p key={c.typeId}>
-                  <span className="text-gold">{c.qty}×</span> {t.name} (
-                  {formatCOP(priceOf(t.name, t.price))} c/u)
+                <p key={c.materialId} className="flex items-center gap-2">
+                  <span className="flex-1">
+                    <span className="text-gold">{c.qty}×</span> {m.name} (
+                    {formatCOP(m.unit_cost)} c/u)
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Quitar ${m.name}`}
+                    onClick={() => removeLine(c.materialId)}
+                    className="cursor-pointer text-gold hover:text-gold-bright"
+                  >
+                    ✕
+                  </button>
                 </p>
               );
             })}
