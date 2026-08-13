@@ -1,10 +1,31 @@
+import { useState } from "react";
 import { useKaelor } from "@/hooks/useKaelorData";
-import { lotsOf, nextCostOf, stockOf } from "@/lib/inventory";
+import { lotsOf, nextCostOf, resetAllData, stockOf } from "@/lib/inventory";
 import { formatCOP } from "@/lib/kaelor";
 
 export function InventarioTab() {
-  const { materials, lots, invoices, suppliers, reload, loading } = useKaelor();
+  const { materials, lots, invoices, suppliers, reload, loading, setError } = useKaelor();
+  const [busy, setBusy] = useState(false);
   const supplierName = (id: string | null) => suppliers.find((s) => s.id === id)?.name ?? "?";
+
+  const handleReset = async () => {
+    if (
+      !window.confirm(
+        "⚠️ Esto borrará TODO: materiales, lotes, facturas y manillas guardadas. ¿Continuar?",
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await resetAllData();
+      await reload();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo borrar la información");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
