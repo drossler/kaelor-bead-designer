@@ -214,3 +214,23 @@ export function fifoCost(lots: Lot[], materialId: string, qty: number): number {
   }
   return cost;
 }
+
+/** Borra TODOS los registros: manillas, facturas, lotes, materiales y proveedores */
+export async function resetAllData() {
+  const tables = [
+    "bracelet_items",
+    "bracelets",
+    "invoice_items",
+    "material_lots",
+    "invoices",
+    "materials",
+    "suppliers",
+  ] as const;
+  for (const t of tables) {
+    const { error } = await supabase
+      .from(t)
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) throw new Error(`${t}: ${error.message}`);
+  }
+}
