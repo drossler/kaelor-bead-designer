@@ -118,17 +118,28 @@ export function InventarioTab() {
         )}
       </div>
 
-      <div className="k-card flex flex-col items-center gap-2 py-4 text-center">
+      <div className="k-card flex flex-col items-center gap-3 py-4 text-center">
         <p className="text-[12px] text-text-soft">
-          Si los datos no se ven actualizados, presiona para recargar.
+          Si los datos no se ven actualizados, presiona recargar.
         </p>
         <button
           type="button"
           onClick={() => reload()}
-          disabled={loading}
+          disabled={loading || busy}
           className="rounded-md border-2 border-gold bg-surface px-5 py-2 text-[13px] font-semibold text-gold transition-colors hover:bg-gold hover:text-ink disabled:opacity-50"
         >
-          {loading ? "🔄 Recargando…" : "🔄 Reiniciar app"}
+          {loading ? "🔄 Recargando…" : "🔄 Recargar datos"}
+        </button>
+        <p className="mt-2 text-[11px] text-text-soft">
+          Reiniciar app borra permanentemente materiales, lotes, facturas y manillas.
+        </p>
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={busy || loading}
+          className="rounded-md border-2 border-red-500 bg-surface px-5 py-2 text-[13px] font-semibold text-red-400 transition-colors hover:bg-red-500 hover:text-white disabled:opacity-50"
+        >
+          {busy ? "🗑️ Borrando…" : "🗑️ Reiniciar app (borrar todo)"}
         </button>
       </div>
     </div>
