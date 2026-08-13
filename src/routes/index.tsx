@@ -46,13 +46,20 @@ function KaelorApp() {
   return (
     <div className="min-h-screen bg-ink p-3 font-sans text-white md:p-4">
       <div className="mx-auto max-w-[1300px]">
-        <header className="mb-4 rounded-lg border-b-[3px] border-gold bg-gradient-to-br from-ink to-[#2d2d2d] px-5 py-6 text-center">
-          <h1 className="font-display text-[28px] font-bold italic text-gold md:text-[32px]">
-            💍 KAELOR Joyería
-          </h1>
-          <p className="mt-1 text-[12px] text-gold-deep">
-            Calculadora + Inventario FIFO por proveedor
-          </p>
+        <header className="mb-4 flex flex-col items-center gap-3 rounded-lg border-b-[3px] border-gold bg-gradient-to-br from-ink to-[#2d2d2d] px-5 py-6 text-center">
+          <img
+            src={logoAsset.url}
+            alt="Logo KAELOR Joyería"
+            className="h-16 w-16 rounded-full object-cover md:h-20 md:w-20"
+          />
+          <div>
+            <h1 className="font-display text-[28px] font-bold italic text-gold md:text-[32px]">
+              KAELOR Joyería
+            </h1>
+            <p className="mt-1 text-[12px] text-gold-deep">
+              Calculadora + Inventario FIFO por proveedor
+            </p>
+          </div>
         </header>
 
         <nav className="mb-4 flex flex-wrap gap-2">
