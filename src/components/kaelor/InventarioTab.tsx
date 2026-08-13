@@ -3,7 +3,7 @@ import { lotsOf, nextCostOf, stockOf } from "@/lib/inventory";
 import { formatCOP } from "@/lib/kaelor";
 
 export function InventarioTab() {
-  const { materials, lots, invoices, suppliers } = useKaelor();
+  const { materials, lots, invoices, suppliers, reload, loading } = useKaelor();
   const supplierName = (id: string | null) => suppliers.find((s) => s.id === id)?.name ?? "?";
 
   return (
@@ -95,6 +95,20 @@ export function InventarioTab() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="k-card flex flex-col items-center gap-2 py-4 text-center">
+        <p className="text-[12px] text-text-soft">
+          Si los datos no se ven actualizados, presiona para recargar.
+        </p>
+        <button
+          type="button"
+          onClick={() => reload()}
+          disabled={loading}
+          className="rounded-md border-2 border-gold bg-surface px-5 py-2 text-[13px] font-semibold text-gold transition-colors hover:bg-gold hover:text-ink disabled:opacity-50"
+        >
+          {loading ? "🔄 Recargando…" : "🔄 Reiniciar app"}
+        </button>
       </div>
     </div>
   );
