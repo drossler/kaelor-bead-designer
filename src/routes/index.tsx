@@ -5,6 +5,7 @@ import { CalculadoraTab } from "@/components/kaelor/CalculadoraTab";
 import { FacturaTab } from "@/components/kaelor/FacturaTab";
 import { InventarioTab } from "@/components/kaelor/InventarioTab";
 import { HistorialTab } from "@/components/kaelor/HistorialTab";
+import logoAsset from "@/assets/kaelor-logo.jpg.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
