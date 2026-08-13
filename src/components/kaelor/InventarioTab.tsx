@@ -3,7 +3,7 @@ import { lotsOf, nextCostOf, stockOf } from "@/lib/inventory";
 import { formatCOP } from "@/lib/kaelor";
 
 export function InventarioTab() {
-  const { materials, lots, invoices, suppliers } = useKaelor();
+  const { materials, lots, invoices, suppliers, reload, loading } = useKaelor();
   const supplierName = (id: string | null) => suppliers.find((s) => s.id === id)?.name ?? "?";
 
   return (
